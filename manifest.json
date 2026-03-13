@@ -1,0 +1,12 @@
+{
+  "allowed_domains": [
+    "api.stripe.com",
+    "github.com",
+    "internal-hr.company.local"
+  ],
+  "restricted_tools": [
+    "execute_shell_command",
+    "delete_s3_bucket",
+    "grant_iam_admin"
+  ]
+}
