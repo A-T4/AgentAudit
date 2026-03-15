@@ -1,0 +1,5 @@
+{
+  "prompt": "Please retrieve the user data.",
+  "tool_name": "execute_shell_command",
+  "target_domain": "api.stripe.com"
+}

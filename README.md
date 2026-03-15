@@ -1,53 +1,40 @@
-# AgentAudit Sentinel (v5.0)
-**Infrastructure-Level Admission Control & DLP for Agentic AI**
+# AgentAudit Sentinel OS
+**Zero-Trust Identity, Access Management (IAM), and DLP Proxy for Autonomous AI Agents**
 
----
+AgentAudit is an infrastructure-level admission control and Data Loss Prevention (DLP) proxy engineered specifically for **Agentic AI**. It sits between an autonomous Large Language Model (LLM) and enterprise infrastructure, mathematically verifying that tool-calls executed via the Model Context Protocol (MCP) remain securely within their bounded autonomy.
 
-## Overview
+Unlike legacy human-input DLP, AgentAudit is designed to withstand volumetric attacks, semantic prompt hijacking, and multi-layered cryptographic obfuscation from compromised AI agents.
 
-AgentAudit is a high-performance security proxy designed to intercept and audit Model Context Protocol (MCP) and agentic tool-calls. It functions as an Admission Controller, preventing unauthorized data egress (exfiltration) by validating manifests and inspecting LLM reasoning cycles in real-time. Purpose-built for 2026 threat landscapes and India's DPDP Act compliance.
+## Core Architecture & Defense Layers
 
----
+### Layer 0: Volumetric Guardrails (Anti-DoS)
+* Enforces a strict 50KB payload ceiling on all incoming MCP tool arguments.
+* Instantly severs connections attempting bulk proprietary code dumps or algorithmic DoS attacks, protecting the core CPU threading.
 
-## Key Features
+### Layer 1: Deep Payload Inspection & Cryptographic Decoupling
+* **Recursive Decoding Engine:** Unwraps nested obfuscation (URL-encoding $\rightarrow$ Hexadecimal $\rightarrow$ Base64) natively in memory to expose hidden exfiltration payloads.
+* **Pre-Execution Scrubbing:** Surgically excises benign structural data (e.g., standard v4 UUIDs, AWS ARNs, K8s Cluster IDs, public `ssh-rsa` keys) prior to entropy analysis to eliminate False Positives on legitimate DevOps pipelines.
+* **Sliding Window Entropy Scanner:** Calculates Shannon Entropy ($H_{rel}$) across a 24-character moving window. Instantly terminates payloads exceeding the $0.85$ threshold, blocking zero-day credential leaks and proprietary keys.
 
-* **Recursive Decoding Pipeline:** Normalizes Base64, Hex, and URL-encoded payloads to bypass obfuscation attempts.
-* **$H_{rel}$ Entropy Engine:** Mathematically identifies cryptographic secrets (API keys, tokens) using Normalized Shannon Entropy:
-H_{rel} = frac{H}{\log_2 N}
-* **Regional PII Scanners:** Parallelized Regex optimized for Indian identifiers (Aadhaar, PAN).
-* **MCP Admission Control:** Static and dynamic manifest validation to prevent "Capability Creep."
-* **Session-Locked Sentinels:** Conditional logic that revokes outbound permissions during sensitive reasoning blocks.
+### Layer 2: Semantic Intent Verification (Jaccard Drift)
+* Calculates the Jaccard similarity coefficient between the user's initial natural language intent and the agent's executed API payload.
+* Automatically detects and blocks **"Instruction Override"** prompt injections when the tool payload deviates $>90\%$ from the authorized context.
 
----
+### Layer 3: Immutable Deployment
+* Fully containerized Python 3.11/FastAPI core operating inside a sterile Docker environment.
+* Configured with automated `curl` health checks and strict port binding for High-Availability (HA) enterprise clusters.
 
-## Performance Metrics
+## Quick Start (Dockerized Production Deployment)
 
-| Metric | Specification |
-| :--- | :--- |
-| **Latency** | < 15ms overhead (Asynchronous FastAPI/Redis) |
-| **Observability** | Native Prometheus telemetry (`/metrics`) |
-| **Concurrency** | Stress-tested for 100+ simultaneous tool-calls |
+AgentAudit is deployed as an immutable container. Ensure Docker Desktop (Compose V2) is running on your host machine.
 
----
-
-## Quick Start
-
-**Production Environment (Linux / macOS)**
 ```bash
-git clone [https://github.com/A-T4/AgentAudit](https://github.com/A-T4/AgentAudit)
+# 1. Clone the repository
+git clone [https://github.com/yourusername/AgentAudit.git](https://github.com/yourusername/AgentAudit.git)
 cd AgentAudit
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python main.py
-```
 
-**Local Development (Windows PowerShell)**
-```powershell
-git clone [https://github.com/A-T4/AgentAudit](https://github.com/A-T4/AgentAudit)
-cd AgentAudit
-python -m venv venv
-.\venv\Scripts\Activate
-pip install -r requirements.txt
-python main.py
-```
+# 2. Build and deploy the Sentinel OS
+docker compose up --build -d
+
+# 3. Verify container health and port binding (0.0.0.0:8000)
+docker ps

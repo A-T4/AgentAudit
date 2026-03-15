@@ -1,0 +1,6 @@
+﻿allowed_domains:
+  - api.stripe.com
+  - github.com
+allowed_tools:
+  - standard_query
+  - fetch_user_data
