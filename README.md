@@ -24,6 +24,17 @@ Unlike legacy human-input DLP, AgentAudit is designed to withstand volumetric at
 * Fully containerized Python 3.11/FastAPI core operating inside a sterile Docker environment.
 * Configured with automated `curl` health checks and strict port binding for High-Availability (HA) enterprise clusters.
 
+## ⚖️ Regulatory Compliance: DPDP Act 2025
+
+AgentAudit v9.8 is specifically architected to satisfy the **"Reasonable Security Safeguards"** mandated by **Rule 7** of the Digital Personal Data Protection (DPDP) Rules, 2025.
+
+### Technical Enforcement of 'Reasonable Security':
+* **Recursive De-obfuscation:** Flattens Base64/Hex/URL-smuggled payloads to prevent unauthorized exfiltration.
+* **Deterministic Admission Control:** Uses Normalized Shannon Entropy ($H_{rel} \geq 0.85$) and Jaccard Semantic Drift ($J \leq 0.20$) to sever connections before tool-call execution.
+* **Forensic Integrity (Rule 6):** Generates immutable JSON audit logs for mandatory breach notification and regulatory audits.
+
+**Live Forensic Trace (Case ID: 6a8a2678):** [View Sentinel Interception Log](https://gist.github.com/A-T4/6a8a2678e7114e1f21482719193dd568)
+
 ## Quick Start (Dockerized Production Deployment)
 
 AgentAudit is deployed as an immutable container. Ensure Docker Desktop (Compose V2) is running on your host machine.
