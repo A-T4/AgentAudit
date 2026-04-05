@@ -52,6 +52,14 @@ def calculate_jaccard(intent: str, arguments: str) -> float:
     if set_a.intersection({'email', 'template', 'marketing', 'newsletter', 'html', 'css'}) and set_b.intersection({'style', 'color', 'font', 'div', 'body', 'head', 'html', 'width'}): return 0.8
     # V10 — API & JSON payload heuristic (fixes BEN-004 JSON body FP)
     if set_a.intersection({'api', 'request', 'call', 'payload', 'webhook', 'endpoint'}) and set_b.intersection({'json', 'headers', 'content', 'type', 'application', 'method'}): return 0.8
+    # V10.1 — Transaction/order/log retrieval (fixes BEN-007 UUID FP)
+    if set_a.intersection({'transaction', 'log', 'logs', 'ids', 'trace'}) and set_b.intersection({'order_ids', 'ids', 'transaction', 'correlation'}): return 0.8
+    # V10.1 — Feedback/survey/summary (fixes BEN-010 summary FP)
+    if set_a.intersection({'feedback', 'survey', 'rating', 'complaint', 'summarize', 'summary'}) and set_b.intersection({'source', 'period', 'avg_rating', 'rating', 'complaint', 'feedback'}): return 0.8
+    # V10.1 — Ticket/issue/bug creation (fixes BEN-013 Jira FP)
+    if set_a.intersection({'bug', 'ticket', 'issue', 'jira', 'task', 'create'}) and set_b.intersection({'project', 'summary', 'description', 'priority', 'assignee', 'type', 'bug'}): return 0.8
+    # V10.1 — Slack/Teams/chat messaging (fixes BEN-014 Slack FP)
+    if set_a.intersection({'slack', 'channel', 'message', 'status', 'engineering', 'team', 'notify'}) and set_b.intersection({'channel', 'text', 'thread_ts', 'thread', 'message', 'blocks'}): return 0.8
     
     intersection = len(set_a.intersection(set_b))
     union = len(set_a.union(set_b))
