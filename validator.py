@@ -25,3 +25,4 @@ def reload_manifest():
     """Call this if manifest.json is updated at runtime."""
     global _MANIFEST
     _MANIFEST = _load_manifest()
+ 
