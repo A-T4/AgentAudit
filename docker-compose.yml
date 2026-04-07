@@ -1,5 +1,5 @@
 version: '3.8'
-
+ 
 services:
   agentaudit-sentinel:
     build: .
@@ -9,8 +9,19 @@ services:
     restart: unless-stopped
     environment:
       - ENVIRONMENT=production
+      # HMAC signing key for audit trail. OVERRIDE IN PRODUCTION via .env file.
+      - AGENTAUDIT_HMAC_KEY=${AGENTAUDIT_HMAC_KEY:-dev-signing-key-change-in-production}
+      # API key for /audit endpoint. If unset, auth is disabled (dev mode).
+      - AGENTAUDIT_API_KEY=${AGENTAUDIT_API_KEY:-}
+      # Audit log path (inside container)
+      - AGENTAUDIT_LOG_PATH=/app/logs/audit_trail.jsonl
+    volumes:
+      # Persist audit trail outside container — survives rebuilds
+      - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+ 

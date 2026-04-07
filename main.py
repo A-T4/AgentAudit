@@ -1,21 +1,36 @@
 import os
 import time
 from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from detectors import calculate_jaccard, get_max_substring_entropy, detect_and_decode, contains_known_secret, contains_pii
 from validator import validate_agent_action
 from audit import log_audit_event
  
-app = FastAPI(title="AgentAudit Sentinel OS v10.3")
+app = FastAPI(title="AgentAudit Sentinel OS v10.4")
 _START_TIME = time.time()
+ 
+# --- CORS Middleware ---
+# Configurable origins via env. Defaults to localhost for dev safety.
+# In production set AGENTAUDIT_CORS_ORIGINS="https://client1.com,https://client2.com"
+_cors_origins_env = os.environ.get("AGENTAUDIT_CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+_CORS_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+ 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
  
 # --- Layer 0: Volumetric Guardrail ---
 MAX_PAYLOAD_BYTES = 51200  # 50KB ceiling
  
 # --- API Key Auth ---
-# Set AGENTAUDIT_API_KEY env var in production. If unset, auth is disabled (dev mode).
-_API_KEY = os.environ.get("AGENTAUDIT_API_KEY", None)
+# Set AGENTAUDIT_API_KEY env var in production. If unset or empty, auth is disabled (dev mode).
+_API_KEY = os.environ.get("AGENTAUDIT_API_KEY") or None
  
 async def verify_api_key(x_api_key: str = Header(default=None)):
     """API key check. Skipped if AGENTAUDIT_API_KEY is not set (dev mode)."""
@@ -38,7 +53,7 @@ async def health_check():
     """Liveness probe for container orchestration."""
     return {
         "status": "healthy",
-        "version": "10.3",
+        "version": "10.4",
         "uptime_seconds": round(time.time() - _START_TIME, 1)
     }
  
@@ -123,3 +138,4 @@ async def audit_mcp_action(request: AuditRequest):
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+ 

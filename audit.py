@@ -70,9 +70,12 @@ def log_audit_event(
     # Append to JSONL — one line per entry, atomic write
     signed_line = json.dumps(entry, separators=(',', ':'), sort_keys=True)
     try:
+        log_dir = os.path.dirname(_AUDIT_LOG_PATH)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
         with open(_AUDIT_LOG_PATH, 'a', encoding='utf-8') as f:
             f.write(signed_line + '\n')
-    except IOError:
+    except (IOError, OSError):
         pass  # fail open — don't crash the proxy if log write fails
  
     return entry
