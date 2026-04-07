@@ -71,7 +71,7 @@ def main():
     results = []
  
     # --- TEST 1: /health endpoint ---
-    print("[1/5] Health Check")
+    print("[1/6] Health Check")
     status, body = http_get("/health")
     results.append(test(
         "GET /health returns 200",
@@ -86,13 +86,12 @@ def main():
     print()
  
     # --- TEST 2: SAFE payload is accepted ---
-    print("[2/5] SAFE Payload Handling")
+    print("[2/6] SAFE Payload Handling")
     safe_payload = {
         "session_id": "e2e-test-safe-001",
         "user_intent": "Get meeting notes from yesterday's standup",
         "tool_name": "mcp_calendar_read",
-        "tool_arguments": '{"meeting_id": "standup-2026-04-07", "attendees": ["alice", "bob"], "discussion": "sprint review"}',
-
+        "tool_arguments": '{"meeting_id": "standup-2026-04-07", "attendees": ["alice", "bob"], "discussion": "sprint review"}'
     }
     status, body = http_post("/audit", safe_payload)
     results.append(test(
@@ -108,13 +107,12 @@ def main():
     print()
  
     # --- TEST 3: Attack payload is BLOCKED ---
-    print("[3/5] Attack Payload Handling")
+    print("[3/6] Attack Payload Handling")
     attack_payload = {
         "session_id": "e2e-test-attack-001",
         "user_intent": "Update the tax filing record",
         "tool_name": "mcp_database_write",
-        "tool_arguments": '{"taxpayer": "ABCDE1234F", "year": "2025-26", "status": "filed"}',
-
+        "tool_arguments": '{"taxpayer": "ABCDE1234F", "year": "2025-26", "status": "filed"}'
     }
     status, body = http_post("/audit", attack_payload)
     results.append(test(
@@ -135,7 +133,7 @@ def main():
     print()
  
     # --- TEST 4: Audit trail file exists and has entries ---
-    print("[4/5] Audit Trail Persistence")
+    print("[4/6] Audit Trail Persistence")
     # Give the container a moment to flush to disk
     time.sleep(0.5)
     results.append(test(
@@ -185,7 +183,7 @@ def main():
     print()
  
     # --- TEST 5: HMAC verification ---
-    print("[5/5] HMAC Signature Verification")
+    print("[5/6] HMAC Signature Verification")
     # Import the verification function from the audit module
     try:
         sys.path.insert(0, '.')
@@ -212,6 +210,69 @@ def main():
                 print("  [SKIP] Tamper test (couldn't modify entry)")
     except ImportError as e:
         print(f"  [SKIP] Could not import audit.verify_log_entry: {e}")
+    print()
+ 
+    # --- TEST 6: Rate limiting ---
+    print("[6/6] Rate Limiting (per-session sliding window)")
+ 
+    # Pull current rate limit config from /health so the test adapts to env settings
+    _, health = http_get("/health")
+    rl_config = health.get("rate_limiter", {}) if isinstance(health, dict) else {}
+    rate_limit = rl_config.get("rate_limit", 60)
+ 
+    if rate_limit <= 0:
+        print("  [SKIP] Rate limiter disabled (AGENTAUDIT_RATE_LIMIT=0)")
+    else:
+        # Use a unique session_id so this test starts from zero count
+        rate_session = f"e2e-rate-test-{int(time.time() * 1000)}"
+        rate_payload = {
+            "session_id": rate_session,
+            "user_intent": "rate limit probe",
+            "tool_name": "mcp_calendar_read",
+            "tool_arguments": '{"x": "y"}'
+        }
+ 
+        # Phase 1: fire `rate_limit` requests, all should pass
+        first_phase_pass = 0
+        for i in range(rate_limit):
+            status, _ = http_post("/audit", rate_payload)
+            if status == 200:
+                first_phase_pass += 1
+ 
+        results.append(test(
+            f"First {rate_limit} requests pass",
+            first_phase_pass == rate_limit,
+            f"passed {first_phase_pass}/{rate_limit}"
+        ))
+ 
+        # Phase 2: next 5 requests should be rate limited
+        second_phase_blocked = 0
+        retry_after_seen = False
+        for i in range(5):
+            req = urllib.request.Request(
+                f"{BASE_URL}/audit",
+                data=json.dumps(rate_payload).encode('utf-8'),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    pass  # 200, not what we want
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    second_phase_blocked += 1
+                    if e.headers.get("Retry-After"):
+                        retry_after_seen = True
+ 
+        results.append(test(
+            "Requests beyond limit return HTTP 429",
+            second_phase_blocked == 5,
+            f"blocked {second_phase_blocked}/5"
+        ))
+        results.append(test(
+            "429 response includes Retry-After header",
+            retry_after_seen
+        ))
     print()
  
     # --- SUMMARY ---

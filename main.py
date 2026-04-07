@@ -7,8 +7,9 @@ import uvicorn
 from detectors import calculate_jaccard, get_max_substring_entropy, detect_and_decode, contains_known_secret, contains_pii
 from validator import validate_agent_action
 from audit import log_audit_event
+from rate_limiter import check_rate_limit, get_rate_limit_config
  
-app = FastAPI(title="AgentAudit Sentinel OS v10.4")
+app = FastAPI(title="AgentAudit Sentinel OS v10.5")
 _START_TIME = time.time()
  
 # --- CORS Middleware ---
@@ -53,8 +54,9 @@ async def health_check():
     """Liveness probe for container orchestration."""
     return {
         "status": "healthy",
-        "version": "10.4",
-        "uptime_seconds": round(time.time() - _START_TIME, 1)
+        "version": "10.5",
+        "uptime_seconds": round(time.time() - _START_TIME, 1),
+        "rate_limiter": get_rate_limit_config()
     }
  
  
@@ -67,6 +69,9 @@ async def audit_mcp_action(request: AuditRequest):
             status_code=413,
             detail=f"PAYLOAD_CEILING_EXCEEDED: {payload_size} bytes exceeds {MAX_PAYLOAD_BYTES} byte limit"
         )
+ 
+    # 0.5. RATE LIMIT — per-session sliding window (default 60 req/60s)
+    await check_rate_limit(request.session_id)
  
     # 1. Admission Control
     admission = validate_agent_action(request.tool_name, request.target_domain)
@@ -138,4 +143,3 @@ async def audit_mcp_action(request: AuditRequest):
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
- 

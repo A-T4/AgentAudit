@@ -109,6 +109,8 @@ AgentAudit reads three environment variables. All have safe defaults for local d
 | `AGENTAUDIT_API_KEY` | *(unset)* | Required value for the `X-API-Key` header on all `/audit` requests. If unset or empty, authentication is **disabled** (dev mode). Set to a strong random string in production. |
 | `AGENTAUDIT_CORS_ORIGINS` | `http://localhost:3000,http://localhost:8000` | Comma-separated list of allowed CORS origins. In production, restrict this to your client application domains only. |
 | `AGENTAUDIT_LOG_PATH` | `audit_trail.jsonl` | File path for the append-only audit log. The Docker deployment overrides this to `/app/logs/audit_trail.jsonl` and mounts the directory as a host volume. |
+| `AGENTAUDIT_RATE_LIMIT` | `60` | Maximum requests per window per `session_id`. Set to `0` to disable rate limiting entirely. |
+| `AGENTAUDIT_RATE_WINDOW_SECONDS` | `60` | Sliding window size in seconds for the rate limiter. |
 
 ### Production Configuration Example
 
@@ -174,6 +176,7 @@ Submits a tool-call for inspection. Requires the `X-API-Key` header in productio
 - `401` — Missing or invalid API key
 - `403` — Tool or target domain rejected by admission control
 - `413` — Payload exceeds 50KB volumetric ceiling
+- `429` — Per-session rate limit exceeded (includes `Retry-After` header)
 
 ---
 
