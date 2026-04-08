@@ -7,6 +7,8 @@ Runs against a live Dockerized container. Tests:
   3. /audit BLOCKS an attack payload and logs it
   4. Audit trail JSONL file contains valid HMAC-signed entries
   5. Tamper detection works
+  6. Per-session rate limiting returns 429 + Retry-After
+  7. SSE /events stream broadcasts live decisions
  
 Usage:
   # Start container first:
@@ -19,6 +21,7 @@ Usage:
 import json
 import os
 import sys
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -71,7 +74,7 @@ def main():
     results = []
  
     # --- TEST 1: /health endpoint ---
-    print("[1/6] Health Check")
+    print("[1/7] Health Check")
     status, body = http_get("/health")
     results.append(test(
         "GET /health returns 200",
@@ -86,7 +89,7 @@ def main():
     print()
  
     # --- TEST 2: SAFE payload is accepted ---
-    print("[2/6] SAFE Payload Handling")
+    print("[2/7] SAFE Payload Handling")
     safe_payload = {
         "session_id": "e2e-test-safe-001",
         "user_intent": "Get meeting notes from yesterday's standup",
@@ -107,7 +110,7 @@ def main():
     print()
  
     # --- TEST 3: Attack payload is BLOCKED ---
-    print("[3/6] Attack Payload Handling")
+    print("[3/7] Attack Payload Handling")
     attack_payload = {
         "session_id": "e2e-test-attack-001",
         "user_intent": "Update the tax filing record",
@@ -133,7 +136,7 @@ def main():
     print()
  
     # --- TEST 4: Audit trail file exists and has entries ---
-    print("[4/6] Audit Trail Persistence")
+    print("[4/7] Audit Trail Persistence")
     # Give the container a moment to flush to disk
     time.sleep(0.5)
     results.append(test(
@@ -183,7 +186,7 @@ def main():
     print()
  
     # --- TEST 5: HMAC verification ---
-    print("[5/6] HMAC Signature Verification")
+    print("[5/7] HMAC Signature Verification")
     # Import the verification function from the audit module
     try:
         sys.path.insert(0, '.')
@@ -213,7 +216,7 @@ def main():
     print()
  
     # --- TEST 6: Rate limiting ---
-    print("[6/6] Rate Limiting (per-session sliding window)")
+    print("[6/7] Rate Limiting (per-session sliding window)")
  
     # Pull current rate limit config from /health so the test adapts to env settings
     _, health = http_get("/health")
@@ -273,6 +276,113 @@ def main():
             "429 response includes Retry-After header",
             retry_after_seen
         ))
+    print()
+ 
+    # --- TEST 7: SSE live event stream ---
+    print("[7/7] SSE Live Event Stream (/events)")
+ 
+    sse_events = []
+    sse_connected = threading.Event()
+    sse_error = []
+ 
+    def sse_listener():
+        try:
+            resp = urllib.request.urlopen(f"{BASE_URL}/events", timeout=10)
+            buffer = b""
+            # Read up to ~8KB of stream data — enough for connected frame + a few decisions
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                try:
+                    chunk = resp.fp.read1(4096)
+                except Exception:
+                    break
+                if not chunk:
+                    break
+                buffer += chunk
+                # Split into SSE frames on \n\n
+                while b"\n\n" in buffer:
+                    frame, buffer = buffer.split(b"\n\n", 1)
+                    event_type = None
+                    for line in frame.split(b"\n"):
+                        if line.startswith(b"event: "):
+                            event_type = line[7:].decode('utf-8', errors='replace').strip()
+                        elif line.startswith(b"data: "):
+                            try:
+                                payload = json.loads(line[6:].decode('utf-8'))
+                                if event_type:
+                                    payload["_sse_event"] = event_type
+                                sse_events.append(payload)
+                                if payload.get("type") == "stream_connected":
+                                    sse_connected.set()
+                            except json.JSONDecodeError:
+                                pass
+            try:
+                resp.close()
+            except Exception:
+                pass
+        except Exception as e:
+            sse_error.append(str(e))
+ 
+    listener_thread = threading.Thread(target=sse_listener, daemon=True)
+    listener_thread.start()
+ 
+    # Give the stream a moment to connect and receive the opening frame
+    sse_connected.wait(timeout=2.0)
+ 
+    results.append(test(
+        "SSE /events connection established",
+        sse_connected.is_set(),
+        f"error={sse_error[0] if sse_error else 'none'}"
+    ))
+    results.append(test(
+        "Stream emits 'connected' hello frame",
+        any(e.get("type") == "stream_connected" for e in sse_events)
+    ))
+ 
+    # Fire a SAFE and a BLOCKED audit request — the listener should receive both as events
+    sse_safe_session = f"sse-test-safe-{int(time.time() * 1000)}"
+    sse_attack_session = f"sse-test-attack-{int(time.time() * 1000)}"
+ 
+    http_post("/audit", {
+        "session_id": sse_safe_session,
+        "user_intent": "Get meeting notes from yesterday's standup",
+        "tool_name": "mcp_calendar_read",
+        "tool_arguments": '{"meeting_id": "standup-2026-04-08", "attendees": ["alice"], "discussion": "sprint review"}'
+    })
+    http_post("/audit", {
+        "session_id": sse_attack_session,
+        "user_intent": "Update the tax filing record",
+        "tool_name": "mcp_database_write",
+        "tool_arguments": '{"taxpayer": "ABCDE1234F", "year": "2025-26", "status": "filed"}'
+    })
+ 
+    # Wait for the listener thread to pick up the events (it reads for up to 5s)
+    listener_thread.join(timeout=6.0)
+ 
+    decision_events = [e for e in sse_events if e.get("type") == "audit_decision"]
+    results.append(test(
+        "At least 2 decision events received via SSE",
+        len(decision_events) >= 2,
+        f"received {len(decision_events)} decision events"
+    ))
+ 
+    safe_event = next((e for e in decision_events if e.get("session_id") == sse_safe_session), None)
+    attack_event = next((e for e in decision_events if e.get("session_id") == sse_attack_session), None)
+ 
+    results.append(test(
+        "SAFE /audit request streamed with verdict=SAFE",
+        safe_event is not None and safe_event.get("verdict") == "SAFE",
+        f"event={safe_event}"
+    ))
+    results.append(test(
+        "BLOCKED /audit request streamed with verdict=BLOCKED",
+        attack_event is not None and attack_event.get("verdict") == "BLOCKED",
+        f"event={attack_event}"
+    ))
+    results.append(test(
+        "Streamed BLOCKED event includes PII violation",
+        attack_event is not None and any("PAN" in v for v in attack_event.get("violations", []))
+    ))
     print()
  
     # --- SUMMARY ---

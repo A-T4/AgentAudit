@@ -51,7 +51,7 @@ Unlike legacy human-input DLP, AgentAudit is designed to withstand volumetric at
 
 ## Regulatory Compliance: DPDP Act 2025
 
-AgentAudit v10.4 is specifically architected to satisfy the **"Reasonable Security Safeguards"** mandated by **Rule 7** of the Digital Personal Data Protection (DPDP) Rules, 2025.
+AgentAudit v10.6 is specifically architected to satisfy the **"Reasonable Security Safeguards"** mandated by **Rule 7** of the Digital Personal Data Protection (DPDP) Rules, 2025.
 
 ### Technical Enforcement of 'Reasonable Security':
 * **Recursive De-obfuscation:** Flattens Base64/Hex/URL-smuggled payloads to prevent unauthorized exfiltration.
@@ -177,6 +177,45 @@ Submits a tool-call for inspection. Requires the `X-API-Key` header in productio
 - `403` — Tool or target domain rejected by admission control
 - `413` — Payload exceeds 50KB volumetric ceiling
 - `429` — Per-session rate limit exceeded (includes `Retry-After` header)
+
+### `GET /events`
+Server-Sent Events stream of live interception decisions. Every `/audit` call — SAFE or BLOCKED — is broadcast to all connected clients in real time. Respects the `X-API-Key` header when authentication is enabled.
+
+**Content type:** `text/event-stream` (WHATWG SSE)
+
+**Frames emitted:**
+
+1. **Opening hello** (once, on connect):
+   ```
+   event: connected
+   data: {"type":"stream_connected","timestamp_ms":1775580000000,"version":"10.6"}
+   ```
+
+2. **Decision events** (one per `/audit` call while connected):
+   ```
+   data: {"type":"audit_decision","timestamp_ms":1775580001234,"session_id":"sess-001","tool_name":"mcp_database_read","verdict":"BLOCKED","violations":["PII_DETECTED:PAN"],"scores":{"entropy":0.912,"jaccard":0.07,"pii":["PAN"],"secret_match":false},"decode_layers":[]}
+   ```
+
+3. **Keepalive** (every ~15 seconds of idle):
+   ```
+   : keepalive
+   ```
+
+**Design notes:**
+- **Stateless:** no historical buffer. Events are ephemeral — if no client is subscribed when a decision is made, it is dropped. Connect *before* you want to observe traffic.
+- **Fan-out to all subscribers:** up to 100 concurrent clients, 100-event bounded queue per client. Slow consumers drop the oldest frame for themselves only; fast consumers are unaffected.
+- **No raw payloads:** the stream carries the same fields as the audit trail — verdicts, violations, scores, session ID — never the raw `tool_arguments`.
+
+**Minimal client (curl):**
+```bash
+curl -N http://localhost:8000/events
+```
+
+**Minimal client (JavaScript):**
+```javascript
+const es = new EventSource("http://localhost:8000/events");
+es.onmessage = (e) => console.log(JSON.parse(e.data));
+```
 
 ---
 
