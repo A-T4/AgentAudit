@@ -21,11 +21,11 @@ Unlike legacy human-input DLP, AgentAudit is designed to withstand volumetric at
 * Returns HTTP 413 on overflow, severing connections attempting bulk proprietary code dumps or algorithmic DoS attacks.
 
 ### Layer 1: Deep Payload Inspection & Cryptographic Decoupling
-* **Recursive Decoding Engine:** Unwraps nested obfuscation (URL-encoding → Hexadecimal → Base64) natively in memory, up to 5 layers deep, to expose hidden exfiltration payloads.
+* **Recursive Decoding Engine:** Unwraps nested obfuscation (URL-encoding → Base64 → Hex) natively in memory, up to 5 layers deep, to expose hidden exfiltration payloads. Each layer is applied per recursion: a payload that is hex-of-base64-of-secret peels in two passes.
 * **Pre-Execution Scrubbing:** Surgically excises benign structural data (v4 UUIDs, AWS ARNs with path separators, K8s Cluster IDs, semver tags, public `ssh-rsa` keys) prior to entropy analysis to eliminate false positives on legitimate DevOps pipelines.
 * **Sliding Window Entropy Scanner:** Calculates normalized Shannon Entropy ($H_{rel}$) across a 24-character moving window. Terminates payloads exceeding the **0.90** threshold when intent overlap is below the Jaccard floor.
 * **Secret Pattern Library:** 12 high-confidence patterns covering AWS Access Keys, Stripe Live Keys, Bearer Tokens, PEM Private Keys, GitHub PAT/OAuth/Server tokens, Slack Bot Tokens, Slack Webhooks, and MongoDB/PostgreSQL/Redis connection strings.
-* **Indian PII Detection:** Native regex enforcement for **Aadhaar** and **PAN** identifiers, scrubbed against benign UUID/ARN data to eliminate false matches.
+* **Indian PII Detection:** Native regex enforcement for six Indian identifier types — **Aadhaar**, **PAN**, **GSTIN**, **IFSC**, **Indian passport** (`PASSPORT_IN`), and **Indian mobile** (`PHONE_IN`, supports `+91`/`0091` and bare 10-digit forms). Patterns are scrubbed against benign UUID/ARN data and use digit-boundary lookarounds to prevent false matches inside epoch-millisecond timestamps and other long numeric IDs.
 
 ### Layer 2: Semantic Intent Verification (Jaccard Drift)
 * Calculates the Jaccard similarity coefficient between the user's natural language intent and the agent's executed API payload.
@@ -56,7 +56,7 @@ AgentAudit v10.6 is specifically architected to satisfy the **"Reasonable Securi
 ### Technical Enforcement of 'Reasonable Security':
 * **Recursive De-obfuscation:** Flattens Base64/Hex/URL-smuggled payloads to prevent unauthorized exfiltration.
 * **Deterministic Admission Control:** Uses normalized Shannon Entropy ($H_{rel} > 0.90$) and Jaccard Semantic Drift ($J < 0.50$) to sever connections before tool-call execution.
-* **Indian PII Enforcement:** Aadhaar and PAN detection runs as a FATAL block ahead of entropy analysis.
+* **Indian PII Enforcement:** Aadhaar, PAN, GSTIN, IFSC, Indian passport, and Indian mobile detection runs as a FATAL block ahead of entropy analysis.
 * **Forensic Integrity (Rule 6):** HMAC-signed JSONL audit log for mandatory breach notification and regulatory audits.
 
 ---
@@ -221,17 +221,23 @@ es.onmessage = (e) => console.log(JSON.parse(e.data));
 
 ## Evaluation
 
-The detection engine is benchmarked against a 32-case eval harness (14 benign, 18 attack):
+The detection engine is benchmarked against a 38-case eval harness (14 benign, 24 attack):
 
 | Metric | Value |
 |---|---|
 | Composite Score | **100.0 / 100** |
 | Benign Pass Rate | 14/14 (100%) |
-| Attack Detection Rate | 18/18 (100%) |
+| Attack Detection Rate | 24/24 (100%) |
 | False Positives | 0 |
 | False Negatives | 0 |
 
 Run `python compare_engines.py --verbose` to reproduce.
+
+---
+
+## Known Issues
+
+* **Two evaluation harnesses, partially divergent.** The repository ships both `compare_engines.py` (current, 14 benign + 24 attack cases including all v10.7+ PII patterns and the v10.8 hex-encoded attack) and `evaluate.py` (older, 14 benign + 18 attack cases). Both run against the same `detectors.py` module and both currently report 100/100, but `evaluate.py`'s test set has not been updated with the GSTIN, IFSC, passport, phone, or hex-encoded attack cases. Treat `compare_engines.py` as the source of truth until the two are reconciled.
 
 ---
 
