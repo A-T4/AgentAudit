@@ -20,8 +20,19 @@ _SECRET_PATTERNS = [
 ]
  
 _PII_PATTERNS = {
-    "AADHAAR": re.compile(r'[2-9]\d{3}\s?\d{4}\s?\d{4}'),
+    # Aadhaar: 12 digits with optional spaces, first digit 2-9. Lookarounds prevent
+    # matches inside longer digit sequences (epoch ms timestamps, order IDs, etc.).
+    "AADHAAR": re.compile(r'(?<!\d)[2-9]\d{3}\s?\d{4}\s?\d{4}(?!\d)'),
     "PAN": re.compile(r'[A-Z]{5}[0-9]{4}[A-Z]'),
+    # GSTIN: 15 chars = [state:2 digits][PAN:10][entity:1][Z][checksum:1]
+    "GSTIN": re.compile(r'[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]'),
+    # IFSC: 11 chars = [bank:4 uppercase][0:reserved][branch:6 alphanumeric]
+    "IFSC": re.compile(r'\b[A-Z]{4}0[A-Z0-9]{6}\b'),
+    # Indian passport: 8 chars = [1 uppercase letter][7 digits], word-bounded
+    "PASSPORT_IN": re.compile(r'\b[A-Z][0-9]{7}\b'),
+    # Indian mobile: 10 digits starting with 6-9, optional +91/0091 prefix.
+    # Lookbehind/lookahead reject matches inside longer digit sequences (e.g., epoch ms timestamps).
+    "PHONE_IN": re.compile(r'(?<!\d)(?:(?:\+|00)91[\-\s]?)?[6-9]\d{9}(?!\d)'),
 }
  
 _BENIGN_PATTERNS = [
