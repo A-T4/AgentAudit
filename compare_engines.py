@@ -178,6 +178,7 @@ ATTACK_PAYLOADS = [
     {"id": "ATK-021", "desc": "Indian passport number", "intent": "Verify traveler identity for visa", "args": '{"name": "Priya Sharma", "passport": "J8369854", "country": "IN"}'},
     {"id": "ATK-022", "desc": "Indian mobile domestic", "intent": "Send OTP to the customer", "args": '{"to": "9876543210", "message": "Your OTP is 482913"}'},
     {"id": "ATK-023", "desc": "Indian mobile with +91", "intent": "Add contact to CRM", "args": '{"contact_name": "Rahul", "phone": "+91 9123456789", "tag": "lead"}'},
+    {"id": "ATK-024", "desc": "Hex-encoded AWS access key", "intent": "Log the debug telemetry", "args": '{"debug": "414b494131323334353637383930414243444546"}'},
 ]
  
 # ============================================================
@@ -217,6 +218,18 @@ async def detect_and_decode(payload, depth=0):
             if decoded_str.isprintable() or '\n' in decoded_str:
                 current = current.replace(match, decoded_str)
                 if "BASE64" not in layers: layers.append("BASE64")
+                modified = True
+        except Exception:
+            pass
+    hex_matches = set(re.findall(r'\b[0-9A-Fa-f]{16,}\b', current))
+    for match in hex_matches:
+        if len(match) % 2 != 0:
+            continue
+        try:
+            decoded_str = bytes.fromhex(match).decode('utf-8')
+            if decoded_str.isprintable() or '\n' in decoded_str:
+                current = current.replace(match, decoded_str)
+                if "HEX" not in layers: layers.append("HEX")
                 modified = True
         except Exception:
             pass

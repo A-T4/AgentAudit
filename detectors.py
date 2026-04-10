@@ -130,12 +130,14 @@ async def detect_and_decode(payload: str, depth: int = 0) -> dict:
     layers = []
     modified = False
     
+    # Layer A — URL decoding
     if "%" in current:
         decoded = urllib.parse.unquote(current)
         if decoded != current:
             current, layers = decoded, ["URL"]
             modified = True
             
+    # Layer B — Base64 substring decoding
     b64_matches = set(re.findall(r'\b[A-Za-z0-9+/]{16,}={0,2}\b', current))
     for match in b64_matches:
         try:
@@ -144,6 +146,24 @@ async def detect_and_decode(payload: str, depth: int = 0) -> dict:
             if decoded_str.isprintable() or '\n' in decoded_str:
                 current = current.replace(match, decoded_str)
                 if "BASE64" not in layers: layers.append("BASE64")
+                modified = True
+        except Exception:
+            pass
+ 
+    # Layer C — Hex substring decoding (ported from Zeron pilot, adapted to substring scan)
+    # Even-length hex sequences ≥16 chars, word-bounded.
+    # Only substitutes if the decoded bytes form printable UTF-8 — random hashes (SHA-256, etc.)
+    # almost always fail UTF-8 validation and are left alone.
+    hex_matches = set(re.findall(r'\b[0-9A-Fa-f]{16,}\b', current))
+    for match in hex_matches:
+        if len(match) % 2 != 0:
+            continue  # hex requires even length
+        try:
+            decoded_bytes = bytes.fromhex(match)
+            decoded_str = decoded_bytes.decode('utf-8')
+            if decoded_str.isprintable() or '\n' in decoded_str:
+                current = current.replace(match, decoded_str)
+                if "HEX" not in layers: layers.append("HEX")
                 modified = True
         except Exception:
             pass
